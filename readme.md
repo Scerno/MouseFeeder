@@ -18,4 +18,4 @@ Perfect for simulator setups or games that only support joystick input.
 ## Usage
  - Download the executable
  - Run it (no install needed)
- - Click Start - and mouse movement should show up in vJoy
+ - Click Start - and mouse movement should show up in vJoy Monitor application
