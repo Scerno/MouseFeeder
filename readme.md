@@ -16,5 +16,6 @@ Perfect for simulator setups or games that only support joystick input.
 - Modules: `pyvjoy`, `pyautogui`, `pynput`, `screeninfo`, `tkinter`
 
 ## Usage
-```bash
-python MouseFeederApp.py
+ - Download the executable
+ - Run it (no install needed)
+ - Click Start - and mouse movement should show up in vJoy
