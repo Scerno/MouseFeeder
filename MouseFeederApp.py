@@ -94,7 +94,8 @@ class MouseFeeder:
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("Mouse to vJoy Feeder")
+        APP_VERSION = "1.0.0"
+        self.title(f"MouseFeeder v{APP_VERSION}")
         self.geometry("650x950")
         self.settings_path = Path(__file__).with_name("settings.json")
 
