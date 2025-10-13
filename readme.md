@@ -9,13 +9,13 @@ Perfect for simulator setups or games that only support joystick input.
 - Simple Tkinter GUI with saved settings
 - Compatible with vJoy 2.1.8+
 
-## Requirements
-- Windows 10/11
+## Dev Requirements
+- Windows 10/11 (untested with previous versions)
 - [vJoy](http://vjoystick.sourceforge.net/)
 - Python 3.10+
 - Modules: `pyvjoy`, `pyautogui`, `pynput`, `screeninfo`, `tkinter`
 
-## Usage
+## General Usage
  - Download the executable
  - Run it (no install needed)
  - Click Start - and mouse movement should show up in vJoy Monitor application
