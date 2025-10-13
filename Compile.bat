@@ -1,0 +1,2 @@
+::  python -m PyInstaller --onefile --noconsole --icon=icon.ico --name "MouseFeeder_v1.1.0" --version-file=version_info.txt MouseFeederApp.py
+python -m PyInstaller --onefile --noconsole --name "MouseFeeder_v1.1.0" --version-file=version_info.txt MouseFeederApp.py

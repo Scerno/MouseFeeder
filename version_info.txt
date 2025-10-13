@@ -1,8 +1,8 @@
 # UTF-8
 VSVersionInfo(
   ffi=FixedFileInfo(
-    filevers=(1,0,0,0),
-    prodvers=(1,0,0,0),
+    filevers=(1,1,0,0),
+    prodvers=(1,1,0,0),
     mask=0x3f,
     flags=0x0,
     OS=0x4,
@@ -16,12 +16,12 @@ VSVersionInfo(
         '040904B0',
         [
           StringStruct('CompanyName', 'Scerno Visualise'),
-          StringStruct('FileDescription', 'MouseFeeder - Mouse to vJoy Converter'),
-          StringStruct('FileVersion', '1.0.0'),
+          StringStruct('FileDescription', 'MouseFeeder - Mouse to vJoy Converter with Numpad POV control'),
+          StringStruct('FileVersion', '1.1.0'),
           StringStruct('InternalName', 'MouseFeederApp'),
-          StringStruct('OriginalFilename', 'MouseFeeder.exe'),
+          StringStruct('OriginalFilename', 'MouseFeeder_v1.1.0.exe'),
           StringStruct('ProductName', 'MouseFeeder'),
-          StringStruct('ProductVersion', '1.0.0')
+          StringStruct('ProductVersion', '1.1.0')
         ]
       )
     ]),

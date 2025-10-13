@@ -9,6 +9,7 @@ import pyautogui
 from screeninfo import get_monitors
 from pynput import mouse as pynput_mouse
 import math
+import ctypes
 
 
 # Force pyvjoy to use the system vJoy DLL instead of its embedded one
@@ -102,18 +103,40 @@ class MouseFeeder:
 # POVFeeder class
 # ---------------------------------------------------------------------------
 from pynput import keyboard
+import ctypes, math, threading, time
 
 class POVFeeder:
     def __init__(self):
         self.running = False
-        self.j = pyvjoy.VJoyDevice(1)
         self.keys_pressed = set()
         self.listener = None
         self.update_hz = 60
 
+        # Load vJoy DLL and required functions
+        dll_path = r"C:\Program Files\vJoy\x64\vJoyInterface.dll"
+        self.vj = ctypes.WinDLL(dll_path)
+
+        # Define function prototypes
+        self.AcquireVJD   = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_uint)(("AcquireVJD", self.vj))
+        self.RelinquishVJD = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_uint)(("RelinquishVJD", self.vj))
+        self.ResetVJD     = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_uint)(("ResetVJD", self.vj))
+        self.SetContPov   = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_uint32, ctypes.c_uint, ctypes.c_ubyte)(("SetContPov", self.vj))
+
+        self.device_id = 1
+        self.pov_h = 1  # POV1 = horizontal
+        self.pov_v = 2  # POV2 = vertical
+
+    # -------------------------
+    # Lifecycle control
+    # -------------------------
     def start(self):
         if self.running:
             return
+        if not self.AcquireVJD(self.device_id):
+            print("❌ Could not acquire vJoy device.")
+            return
+
+        print("✅ Acquired vJoy device", self.device_id)
         self.running = True
         self.listener = keyboard.Listener(on_press=self.on_press, on_release=self.on_release)
         self.listener.start()
@@ -124,80 +147,130 @@ class POVFeeder:
         if self.listener:
             self.listener.stop()
             self.listener = None
+        self.RelinquishVJD(self.device_id)
+        print("✅ Released vJoy device")
 
+    # -------------------------
+    # Keyboard handling
+    # -------------------------
     def on_press(self, key):
         try:
-            name = key.name.lower()
+            if key.char is not None:
+                name = key.char
+            else:
+                # Handle numpad by VK code
+                if hasattr(key, "vk") and 96 <= key.vk <= 105:
+                    name = f"numpad{key.vk - 96}"  # numpad0–9
+                else:
+                    name = str(key)
         except AttributeError:
-            return
+            name = str(key)
 
-        # normalise various numpad names
-        if name.startswith("num_"):
-            name = name.replace("num_", "num")
-        elif name.isdigit() and key.__class__.__name__ == "KeyCode":
-            name = f"num{name}"
-
-        if name.startswith("num"):
-            self.keys_pressed.add(name)
-
+        self.keys_pressed.add(name)
+        # Debug output
+        # print(f"Pressed: {name}")
 
     def on_release(self, key):
         try:
-            if key.name in self.keys_pressed:
-                self.keys_pressed.remove(key.name)
+            if key.char is not None:
+                name = key.char
+            else:
+                if hasattr(key, "vk") and 96 <= key.vk <= 105:
+                    name = f"numpad{key.vk - 96}"
+                else:
+                    name = str(key)
         except AttributeError:
-            pass
+            name = str(key)
 
+        if name in self.keys_pressed:
+            self.keys_pressed.remove(name)
+            print(f"Released: {name}")
+
+
+    # -------------------------
+    # POV calculation logic
+    # -------------------------
     def calculate_angles(self):
-        horiz, vert = 0.0, 0.0
+        kp = self.keys_pressed
+        horiz = None
+        vert = None
 
-        # horizontal base
-        if "num8" in self.keys_pressed: horiz += 0
-        if "num2" in self.keys_pressed: horiz += 180
-        if "num4" in self.keys_pressed: horiz += 270
-        if "num6" in self.keys_pressed: horiz += 90
+        # --- Horizontal POV1 (Num7–9–4–6–1–3–8–2)
+        horiz_map = {
+            "numpad8": 0,    # forward
+            "numpad9": 45,   # 45° right
+            "numpad6": 90,   # right
+            "numpad3": 135,  # 135° right (back-right)
+            "numpad2": 180,  # backward
+            "numpad1": 225,  # 135° left (back-left)
+            "numpad4": 270,  # left
+            "numpad7": 315,  # 45° left (front-left)
+        }
 
-        # fine-tuning
-        if "num7" in self.keys_pressed: horiz -= 22.5
-        if "num9" in self.keys_pressed: horiz += 22.5
+        pressed_horiz_keys = [horiz_map[k] for k in horiz_map if k in kp]
+        if pressed_horiz_keys:
+            x = sum([math.cos(math.radians(a)) for a in pressed_horiz_keys]) / len(pressed_horiz_keys)
+            y = sum([math.sin(math.radians(a)) for a in pressed_horiz_keys]) / len(pressed_horiz_keys)
+            horiz = (math.degrees(math.atan2(y, x)) + 360) % 360
 
-        # vertical base
-        if "num5" in self.keys_pressed: vert += 90
-        if "num0" in self.keys_pressed: vert -= 90
-        # fine
-        if "num3" in self.keys_pressed: vert += 22.5
-        if "num1" in self.keys_pressed: vert -= 22.5
+        # --- Vertical POV2 (Num5, Num0)
+        up = "numpad5" in kp
+        down = "numpad0" in kp
+        horiz_active = bool(pressed_horiz_keys)
 
-        # average when multiple horizontal keys pressed
-        horiz_keys = [k for k in ["num8","num2","num4","num6"] if k in self.keys_pressed]
-        if len(horiz_keys) > 1:
-            # take average of directions around circle
-            angles = []
-            for k in horiz_keys:
-                if k=="num8": angles.append(0)
-                elif k=="num6": angles.append(90)
-                elif k=="num2": angles.append(180)
-                elif k=="num4": angles.append(270)
-            x = sum([math.cos(math.radians(a)) for a in angles]) / len(angles)
-            y = sum([math.sin(math.radians(a)) for a in angles]) / len(angles)
-            horiz = (math.degrees(math.atan2(y,x)) + 360) % 360
+        if up and not down:
+            vert = 45.0 if horiz_active else 90.0
+        elif down and not up:
+            vert = -45.0 if horiz_active else -90.0
+        elif horiz_active:
+            vert = 0.0
 
-        # constrain vertical
-        vert = max(-90, min(90, vert))
-        return horiz, vert
+        # Return None if nothing is pressed at all
+        if horiz is None and vert is None:
+            return None, None
+        return horiz or 0.0, vert or 0.0
 
+
+    # -------------------------
+    # Main loop
+    # -------------------------
     def run(self):
-        import math
+        print("🔍 POVFeeder active. Watching for NumPad keys...")
+        last_keys = set()
+        last_angles = (None, None)
+
         while self.running:
             h, v = self.calculate_angles()
-            # vJoy expects 0–35999 for continuous POVs; -1 means neutral
-            if self.keys_pressed:
-                self.j.set_cont_pov(int(h * 100), 0)  # POV 1 horizontal
-                self.j.set_cont_pov(int((v + 90) * 100), 1)  # POV 2 vertical
+
+            if self.keys_pressed != last_keys:
+                print(f"Keys pressed: {sorted(list(self.keys_pressed))}")
+                last_keys = set(self.keys_pressed)
+
+            if h is not None and v is not None:
+                # Convert to vJoy angles
+                h_val = ctypes.c_uint32(int(h * 100))
+                pov2_angle = (90 - v) % 360
+                # v_val = ctypes.c_uint32(int(pov2_angle * 100))
+                v_val = ctypes.c_uint32(int(((v + 90 - 90) % 360) * 100))
+
+
+                if (round(h, 1), round(v, 1)) != last_angles:
+                    print(f" → Calculated angles: horiz={h:.1f}°, vert={v:.1f}°")
+                    last_angles = (round(h, 1), round(v, 1))
+
+                self.SetContPov(h_val, self.device_id, self.pov_h)
+                self.SetContPov(v_val, self.device_id, self.pov_v)
             else:
-                self.j.set_cont_pov(-1, 0)
-                self.j.set_cont_pov(-1, 1)
+                # No keys pressed → neutral
+                neutral = ctypes.c_uint32(0xFFFFFFFF)
+                self.SetContPov(neutral, self.device_id, self.pov_h)
+                self.SetContPov(neutral, self.device_id, self.pov_v)
+                last_angles = (None, None)
+
             time.sleep(1 / self.update_hz)
+
+
+
 
 
 
@@ -209,7 +282,7 @@ class POVFeeder:
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
-        APP_VERSION = "1.0.0"
+        APP_VERSION = "1.1.0"
         self.title(f"MouseFeeder v{APP_VERSION}")
         self.geometry("650x950")
         self.settings_path = Path(__file__).with_name("settings.json")
